@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR Scanner Gudang</title>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <style>
+        body {
+            font-family: sans-serif;
+            margin: 0;
+            padding: 20px;
+            text-align: center;
+            background-color: #f0f0f0;
+        }
+        #reader {
+            width: 100%;
+            max-width: 400px;
+            margin: 0 auto;
+            border: 2px solid #333;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        #reader__dashboard_section_csr {
+            padding: 15px;
+            background-color: #333;
+            color: white;
+            font-size: 1.1em;
+        }
+        #result {
+            margin-top: 20px;
+            font-weight: bold;
+            color: green;
+        }
+    </style>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+
+    <h2>Scan QR Gudang</h2>
+    <p>Arahkan kamera ke Kode Barang. Hasil akan otomatis terkirim ke bot.</p>
+    
+    <div id="reader"></div>
+    <div id="result"></div>
+
+    <script>
+        // --- LOGIKA UTAMA SCANNER ---
+        
+        function onScanSuccess(decodedText, decodedResult) {
+            // 1. Tampilkan hasil di layar Mini App
+            document.getElementById('result').innerHTML = `Kode Terbaca: <b>${decodedText}</b>`;
+            
+            // 2. Kirim Kode ke Telegram Chat
+            try {
+                // Gunakan fungsi Telegram Web App API untuk mengirim data
+                // Data ini akan muncul sebagai PESAN TEKS di chat bot Anda.
+                Telegram.WebApp.sendData(decodedText);
+                
+                // 3. Tutup Mini App
+                Telegram.WebApp.close();
+            } catch (error) {
+                console.error("Gagal mengirim data ke Telegram:", error);
+                document.getElementById('result').innerHTML += '<br>❌ GAGAL KIRIM DATA KE BOT.';
+            }
+
+            // Hentikan scanning setelah berhasil
+            html5QrcodeScanner.clear();
+        }
+
+        function onScanFailure(error) {
+            // Biasanya terjadi jika kamera belum menemukan kode QR
+            // Bisa diabaikan atau ditambahkan logging
+            // console.warn(`Code scan error = ${error}`);
+        }
+
+        // Inisialisasi Scanner
+        var html5QrcodeScanner = new Html5QrcodeScanner(
+            "reader", 
+            { 
+                fps: 10, 
+                qrbox: {width: 250, height: 250},
+                formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE] // Hanya fokus ke QR Code
+            },
+            false
+        );
+        html5QrcodeScanner.render(onScanSuccess, onScanFailure);
+
+        // --- PENTING: Initialization API Telegram ---
+        Telegram.WebApp.ready();
+    </script>
+
+</body>
+</html>
