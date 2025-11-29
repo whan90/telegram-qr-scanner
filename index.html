@@ -45,6 +45,13 @@
     <div id="result"></div>
 
     <script>
+        // --- INISIALISASI VARIABEL GLOBAL ---
+        const html5Qrcode = new Html5Qrcode("reader");
+        const config = { 
+            fps: 10, 
+            qrbox: {width: 250, height: 250}
+        };
+        
         // --- LOGIKA UTAMA SCANNER ---
         
         // Fungsi utama yang dipanggil setelah QR Code berhasil dibaca
@@ -52,23 +59,27 @@
             // 1. Tampilkan hasil di layar Mini App
             document.getElementById('result').innerHTML = `Kode Terbaca: <b>${decodedText}</b>`;
             
-            // 2. Kirim Kode ke Kolom Pesan Chat Telegram
-            try {
-                // Mengatur teks input chat Telegram ke teks hasil scan
-                Telegram.WebApp.setText(' ' + decodedText); 
-                
-                // Memberikan feedback haptic (getaran) sukses pada HP
-                Telegram.WebApp.HapticFeedback.notificationOccurred('success');
-                
-                // 3. Tutup Mini App
-                Telegram.WebApp.close();
-            } catch (error) {
-                console.error("Gagal mengirim data ke Telegram:", error);
-                document.getElementById('result').innerHTML += '<br>❌ GAGAL KIRIM DATA KE BOT. Silakan coba lagi.';
-            }
-
-            // Hentikan scanning setelah berhasil
-            html5QrcodeScanner.clear();
+            // 2. Hentikan scanning SEBELUM berinteraksi dengan Telegram API
+            html5Qrcode.stop().then((ignore) => {
+                // Proses mengirim data dan menutup hanya dieksekusi setelah stop berhasil
+                try {
+                    // Mengatur teks input chat Telegram dengan default "/out " di depannya
+                    Telegram.WebApp.setText('/out ' + decodedText); 
+                    
+                    // Memberikan feedback haptic (getaran) sukses pada HP
+                    Telegram.WebApp.HapticFeedback.notificationOccurred('success');
+                    
+                    // 3. Tutup Mini App
+                    Telegram.WebApp.close();
+                } catch (error) {
+                    console.error("Gagal mengirim data ke Telegram:", error);
+                    document.getElementById('result').innerHTML += '<br>❌ GAGAL KIRIM DATA KE BOT. Silakan coba lagi.';
+                }
+            }).catch((err) => {
+                // Jika gagal stop (jarang terjadi)
+                console.error("Gagal menghentikan scanner:", err);
+                document.getElementById('result').innerHTML += '<br>❌ Gagal menghentikan scanner.';
+            });
         }
 
         // Fungsi yang dipanggil ketika scan gagal (diabaikan, hanya untuk logging)
@@ -78,35 +89,27 @@
 
         // --- INISIALISASI KAMERA DAN SCANNER ---
         
-        // Membuat instance scanner
-        const html5Qrcode = new Html5Qrcode("reader");
-        const config = { 
-            fps: 10, 
-            qrbox: {width: 250, height: 250}
-        };
-
-        // Dapatkan daftar kamera
+        // Dapatkan daftar kamera dan paksa kamera belakang
         Html5Qrcode.getCameras().then(devices => {
             if (devices && devices.length) {
-                // 1. Cari kamera belakang
+                // Cari kamera belakang
                 let cameraId = devices.find(device => 
                     device.label.toLowerCase().includes('back') || 
                     device.label.toLowerCase().includes('rear') ||
-                    // Beberapa perangkat hanya memberikan ID sebagai 'default' atau '0'
-                    devices.length > 1 && device.id === devices[devices.length - 1].id 
+                    (devices.length > 1 && device.id === devices[devices.length - 1].id) 
                 );
                 
-                // 2. Tentukan kamera yang akan digunakan (kamera belakang atau kamera pertama jika belakang tidak teridentifikasi)
+                // Tentukan kamera yang akan digunakan (kamera belakang atau kamera pertama)
                 let cameraToUse = cameraId ? cameraId.id : devices[0].id;
                 
-                // 3. Mulai scan dengan ID kamera yang spesifik
+                // Mulai scan dengan ID kamera yang spesifik
                 html5Qrcode.start(
                     cameraToUse, 
                     config, 
                     onScanSuccess, 
                     onScanFailure
                 ).catch(err => {
-                     document.getElementById('result').innerHTML = `❌ Gagal Memulai Kamera: Pastikan Anda memberikan izin dan coba lagi.`;
+                     document.getElementById('result').innerHTML = `❌ Gagal Memulai Kamera: Pastikan Anda memberikan izin kamera.`;
                      console.error(err);
                 });
 
