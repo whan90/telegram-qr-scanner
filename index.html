@@ -4,7 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>QR Scanner Gudang</title>
-    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="https://unpkg.com/html5-qrcode"></script> 
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
     <style>
         body {
             font-family: sans-serif;
@@ -33,12 +35,11 @@
             color: green;
         }
     </style>
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
 
-    <h2>Scan QR Gudang</h2>
-    <p>Arahkan kamera ke Kode Barang. Hasil akan otomatis terkirim ke bot.</p>
+    <h2>Scan Barang Gudang</h2>
+    <p>Setelah scan sukses, tambahkan perintah /out atau /re di chat.</p>
     
     <div id="reader"></div>
     <div id="result"></div>
@@ -46,44 +47,76 @@
     <script>
         // --- LOGIKA UTAMA SCANNER ---
         
+        // Fungsi utama yang dipanggil setelah QR Code berhasil dibaca
         function onScanSuccess(decodedText, decodedResult) {
             // 1. Tampilkan hasil di layar Mini App
             document.getElementById('result').innerHTML = `Kode Terbaca: <b>${decodedText}</b>`;
             
-            // 2. Kirim Kode ke Telegram Chat
+            // 2. Kirim Kode ke Kolom Pesan Chat Telegram
             try {
-                // Gunakan fungsi Telegram Web App API untuk mengirim data
-                // Data ini akan muncul sebagai PESAN TEKS di chat bot Anda.
-                Telegram.WebApp.sendData(decodedText);
+                // Mengatur teks input chat Telegram ke teks hasil scan
+                Telegram.WebApp.setText(' ' + decodedText); 
+                
+                // Memberikan feedback haptic (getaran) sukses pada HP
+                Telegram.WebApp.HapticFeedback.notificationOccurred('success');
                 
                 // 3. Tutup Mini App
                 Telegram.WebApp.close();
             } catch (error) {
                 console.error("Gagal mengirim data ke Telegram:", error);
-                document.getElementById('result').innerHTML += '<br>❌ GAGAL KIRIM DATA KE BOT.';
+                document.getElementById('result').innerHTML += '<br>❌ GAGAL KIRIM DATA KE BOT. Silakan coba lagi.';
             }
 
             // Hentikan scanning setelah berhasil
             html5QrcodeScanner.clear();
         }
 
+        // Fungsi yang dipanggil ketika scan gagal (diabaikan, hanya untuk logging)
         function onScanFailure(error) {
-            // Biasanya terjadi jika kamera belum menemukan kode QR
-            // Bisa diabaikan atau ditambahkan logging
             // console.warn(`Code scan error = ${error}`);
         }
 
-        // Inisialisasi Scanner
-        var html5QrcodeScanner = new Html5QrcodeScanner(
-            "reader", 
-            { 
-                fps: 10, 
-                qrbox: {width: 250, height: 250},
-                formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE] // Hanya fokus ke QR Code
-            },
-            false
-        );
-        html5QrcodeScanner.render(onScanSuccess, onScanFailure);
+        // --- INISIALISASI KAMERA DAN SCANNER ---
+        
+        // Membuat instance scanner
+        const html5Qrcode = new Html5Qrcode("reader");
+        const config = { 
+            fps: 10, 
+            qrbox: {width: 250, height: 250}
+        };
+
+        // Dapatkan daftar kamera
+        Html5Qrcode.getCameras().then(devices => {
+            if (devices && devices.length) {
+                // 1. Cari kamera belakang
+                let cameraId = devices.find(device => 
+                    device.label.toLowerCase().includes('back') || 
+                    device.label.toLowerCase().includes('rear') ||
+                    // Beberapa perangkat hanya memberikan ID sebagai 'default' atau '0'
+                    devices.length > 1 && device.id === devices[devices.length - 1].id 
+                );
+                
+                // 2. Tentukan kamera yang akan digunakan (kamera belakang atau kamera pertama jika belakang tidak teridentifikasi)
+                let cameraToUse = cameraId ? cameraId.id : devices[0].id;
+                
+                // 3. Mulai scan dengan ID kamera yang spesifik
+                html5Qrcode.start(
+                    cameraToUse, 
+                    config, 
+                    onScanSuccess, 
+                    onScanFailure
+                ).catch(err => {
+                     document.getElementById('result').innerHTML = `❌ Gagal Memulai Kamera: Pastikan Anda memberikan izin dan coba lagi.`;
+                     console.error(err);
+                });
+
+            } else {
+                document.getElementById('result').innerHTML = "❌ Tidak ada kamera yang ditemukan.";
+            }
+        }).catch(err => {
+            document.getElementById('result').innerHTML = "❌ Gagal mendapatkan daftar kamera.";
+            console.error(err);
+        });
 
         // --- PENTING: Initialization API Telegram ---
         Telegram.WebApp.ready();
