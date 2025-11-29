@@ -6,124 +6,76 @@
     <title>QR Scanner Gudang</title>
     <script src="https://unpkg.com/html5-qrcode"></script> 
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-
     <style>
-        body {
-            font-family: sans-serif;
-            margin: 0;
-            padding: 20px;
-            text-align: center;
-            background-color: #f0f0f0;
-        }
-        #reader {
-            width: 100%;
-            max-width: 400px;
-            margin: 0 auto;
-            border: 2px solid #333;
-            border-radius: 8px;
-            overflow: hidden;
-        }
-        #reader__dashboard_section_csr {
-            padding: 15px;
-            background-color: #333;
-            color: white;
-            font-size: 1.1em;
-        }
-        #result {
-            margin-top: 20px;
-            font-weight: bold;
-            color: green;
-        }
+        body { font-family: sans-serif; margin: 0; padding: 20px; text-align: center; background-color: #f0f0f0; }
+        #reader { width: 100%; max-width: 400px; margin: 0 auto; border: 2px solid #333; border-radius: 8px; overflow: hidden; }
+        #result-container { display: none; margin-top: 20px; padding: 20px; background: white; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .btn { display: block; width: 100%; padding: 15px; margin: 10px 0; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; color: white; }
+        .btn-out { background-color: #d32f2f; } /* Merah */
+        .btn-re { background-color: #1976d2; } /* Biru */
+        .btn-cancel { background-color: #757575; } /* Abu */
+        h3 { margin-bottom: 5px; color: #333; }
+        #scanned-code { color: #007bff; font-size: 1.2em; word-break: break-all; }
     </style>
 </head>
 <body>
 
-    <h2>Scan Barang Gudang</h2>
-    <p>Setelah scan sukses, tambahkan perintah /out atau /re di chat.</p>
+    <h2>Scanner Gudang</h2>
     
     <div id="reader"></div>
-    <div id="result"></div>
+
+    <div id="result-container">
+        <h3>Kode Terbaca:</h3>
+        <div id="scanned-code">...</div>
+        <p>Pilih Tindakan:</p>
+        <button class="btn btn-out" onclick="sendAction('/out')">📤 BARANG KELUAR (OUT)</button>
+        <button class="btn btn-re" onclick="sendAction('/re')">📥 MASUK KEMBALI (RE)</button>
+        <button class="btn btn-cancel" onclick="location.reload()">🔄 SCAN ULANG</button>
+    </div>
 
     <script>
-        // --- INISIALISASI VARIABEL GLOBAL ---
         const html5Qrcode = new Html5Qrcode("reader");
-        const config = { 
-            fps: 10, 
-            qrbox: {width: 250, height: 250}
-        };
-        
-        // --- LOGIKA UTAMA SCANNER ---
-        
-        // Fungsi utama yang dipanggil setelah QR Code berhasil dibaca
+        let currentCode = "";
+
         function onScanSuccess(decodedText, decodedResult) {
-            // 1. Tampilkan hasil di layar Mini App
-            document.getElementById('result').innerHTML = `Kode Terbaca: <b>${decodedText}</b>`;
+            // 1. Simpan kode
+            currentCode = decodedText;
             
-            // 2. Hentikan scanning SEBELUM berinteraksi dengan Telegram API
-            html5Qrcode.stop().then((ignore) => {
-                // Proses mengirim data dan menutup hanya dieksekusi setelah stop berhasil
-                try {
-                    // Mengatur teks input chat Telegram dengan default "/out " di depannya
-                    Telegram.WebApp.setText('/out ' + decodedText); 
-                    
-                    // Memberikan feedback haptic (getaran) sukses pada HP
-                    Telegram.WebApp.HapticFeedback.notificationOccurred('success');
-                    
-                    // 3. Tutup Mini App
-                    Telegram.WebApp.close();
-                } catch (error) {
-                    console.error("Gagal mengirim data ke Telegram:", error);
-                    document.getElementById('result').innerHTML += '<br>❌ GAGAL KIRIM DATA KE BOT. Silakan coba lagi.';
-                }
-            }).catch((err) => {
-                // Jika gagal stop (jarang terjadi)
-                console.error("Gagal menghentikan scanner:", err);
-                document.getElementById('result').innerHTML += '<br>❌ Gagal menghentikan scanner.';
-            });
+            // 2. Hentikan kamera
+            html5Qrcode.stop().then(() => {
+                // 3. Sembunyikan reader, Tampilkan menu tombol
+                document.getElementById('reader').style.display = 'none';
+                document.getElementById('result-container').style.display = 'block';
+                document.getElementById('scanned-code').innerText = currentCode;
+                Telegram.WebApp.HapticFeedback.notificationOccurred('success');
+            }).catch(err => console.error(err));
         }
 
-        // Fungsi yang dipanggil ketika scan gagal (diabaikan, hanya untuk logging)
-        function onScanFailure(error) {
-            // console.warn(`Code scan error = ${error}`);
+        function sendAction(command) {
+            // Mengirim data format: "/out KODE" atau "/re KODE"
+            const fullCommand = `${command} ${currentCode}`;
+            Telegram.WebApp.sendData(fullCommand);
+            Telegram.WebApp.close();
         }
 
-        // --- INISIALISASI KAMERA DAN SCANNER ---
+        // --- Inisialisasi Kamera (Paksa Belakang) ---
+        const config = { fps: 10, qrbox: {width: 250, height: 250} };
         
-        // Dapatkan daftar kamera dan paksa kamera belakang
         Html5Qrcode.getCameras().then(devices => {
             if (devices && devices.length) {
-                // Cari kamera belakang
-                let cameraId = devices.find(device => 
-                    device.label.toLowerCase().includes('back') || 
-                    device.label.toLowerCase().includes('rear') ||
-                    (devices.length > 1 && device.id === devices[devices.length - 1].id) 
-                );
-                
-                // Tentukan kamera yang akan digunakan (kamera belakang atau kamera pertama)
+                let cameraId = devices.find(d => d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('rear'));
                 let cameraToUse = cameraId ? cameraId.id : devices[0].id;
                 
-                // Mulai scan dengan ID kamera yang spesifik
-                html5Qrcode.start(
-                    cameraToUse, 
-                    config, 
-                    onScanSuccess, 
-                    onScanFailure
-                ).catch(err => {
-                     document.getElementById('result').innerHTML = `❌ Gagal Memulai Kamera: Pastikan Anda memberikan izin kamera.`;
-                     console.error(err);
-                });
-
+                html5Qrcode.start(cameraToUse, config, onScanSuccess);
             } else {
-                document.getElementById('result').innerHTML = "❌ Tidak ada kamera yang ditemukan.";
+                document.getElementById('reader').innerHTML = "❌ Kamera tidak ditemukan.";
             }
         }).catch(err => {
-            document.getElementById('result').innerHTML = "❌ Gagal mendapatkan daftar kamera.";
-            console.error(err);
+            document.getElementById('reader').innerHTML = "❌ Izin kamera diperlukan.";
         });
 
-        // --- PENTING: Initialization API Telegram ---
         Telegram.WebApp.ready();
+        Telegram.WebApp.expand(); // Agar full screen
     </script>
-
 </body>
 </html>
