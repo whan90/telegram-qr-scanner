@@ -38,54 +38,60 @@
         let currentCode = "";
 
         function onScanSuccess(decodedText, decodedResult) {
-            // 1. Simpan kode
+            // Hentikan kamera dan tampilkan tombol
             currentCode = decodedText;
             
-            // 2. Hentikan kamera
             html5Qrcode.stop().then(() => {
-                // 3. Sembunyikan reader, Tampilkan menu tombol
                 document.getElementById('reader').style.display = 'none';
                 document.getElementById('result-container').style.display = 'block';
                 document.getElementById('scanned-code').innerText = currentCode;
-                Telegram.WebApp.HapticFeedback.notificationOccurred('success');
-            }).catch(err => console.error(err));
+                // Feedback Haptik
+                if (Telegram.WebApp.HapticFeedback) {
+                    Telegram.WebApp.HapticFeedback.notificationOccurred('success');
+                }
+            }).catch(err => console.error("Gagal menghentikan scanner:", err));
         }
 
         function sendAction(command) {
-    // Mengirim data format: "/out KODE" atau "/re KODE"
-    const fullCommand = `${command} ${currentCode}`;
-    console.log("Sending WebApp data:", fullCommand);
+            // Mengirim data format: "/out KODE" atau "/re KODE"
+            const fullCommand = `${command} ${currentCode}`;
+            console.log("Sending WebApp data:", fullCommand);
 
-    // Kirim data ke bot. Beri jeda kecil sebelum menutup agar data sempat dikirim.
-    Telegram.WebApp.sendData(fullCommand);
+            // Kirim data ke bot.
+            Telegram.WebApp.sendData(fullCommand);
 
-    // Delay 200-400ms sebelum menutup webapp. Cukup untuk mayoritas jaringan.
-    setTimeout(() => {
-        try {
-            Telegram.WebApp.close();
-        } catch (e) {
-            console.warn("Gagal menutup WebApp:", e);
+            // Jeda 300ms untuk memberi waktu Telegram mengirim pesan
+            setTimeout(() => {
+                try {
+                    Telegram.WebApp.close();
+                } catch (e) {
+                    console.warn("Gagal menutup WebApp (Mungkin di browser desktop):", e);
+                }
+            }, 300);
         }
-    }, 300);
-}
 
-
-        // --- Inisialisasi Kamera (Paksa Belakang) ---
+        // --- Inisialisasi Kamera ---
         const config = { fps: 10, qrbox: {width: 250, height: 250} };
         
         Html5Qrcode.getCameras().then(devices => {
             if (devices && devices.length) {
+                // Mencari kamera belakang secara heuristik
                 let cameraId = devices.find(d => d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('rear'));
                 let cameraToUse = cameraId ? cameraId.id : devices[0].id;
                 
-                html5Qrcode.start(cameraToUse, config, onScanSuccess);
+                html5Qrcode.start(cameraToUse, config, onScanSuccess).catch(err => {
+                    document.getElementById('reader').innerHTML = `❌ Gagal memulai kamera: ${err.name}. Coba refresh.`;
+                    console.error("Error starting camera:", err);
+                });
             } else {
                 document.getElementById('reader').innerHTML = "❌ Kamera tidak ditemukan.";
             }
         }).catch(err => {
             document.getElementById('reader').innerHTML = "❌ Izin kamera diperlukan.";
+            console.error("Error getting cameras:", err);
         });
 
+        // Set up WebApp
         Telegram.WebApp.ready();
         Telegram.WebApp.expand(); // Agar full screen
     </script>
