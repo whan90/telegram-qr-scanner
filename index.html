@@ -64,9 +64,32 @@
             // Buat URL Deep Link
             const url = `https://t.me/${BOT_USERNAME}?start=${payload}`;
             
-            // Buka URL tersebut (ini akan menutup WebApp dan memicu command start di bot)
-            Telegram.WebApp.openTelegramLink(url);
-            Telegram.WebApp.close();
+            console.log("Mencoba membuka URL:", url);
+
+            // --- STRATEGI BARU: SHOTGUN APPROACH ---
+            
+            // Cara 1: Coba cara standar (biasanya sukses di HP)
+            try {
+                Telegram.WebApp.openTelegramLink(url);
+            } catch (e) {
+                console.log("openTelegramLink gagal/diabaikan");
+            }
+
+            // Cara 2: PAKSA Buka Jendela Baru (Solusi untuk Telegram Desktop)
+            // Ini memaksa Windows menangani protokol t.me:// dan mengirim trigger baru ke aplikasi
+            setTimeout(() => {
+                window.open(url, '_blank');
+            }, 100);
+
+            // Cara 3: Redirect langsung (Cadangan terakhir)
+            setTimeout(() => {
+                window.location.href = url;
+            }, 200);
+
+            // Tutup Mini App setelah jeda agak lama untuk memastikan link tereksekusi
+            setTimeout(() => {
+                Telegram.WebApp.close();
+            }, 1000);
         }
 
         // --- Inisialisasi Kamera ---
