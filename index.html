@@ -28,8 +28,8 @@
         <h3>Kode Terbaca:</h3>
         <div id="scanned-code">...</div>
         <p>Pilih Tindakan:</p>
-        <button class="btn btn-out" onclick="sendAction('/out')">📤 BARANG KELUAR (OUT)</button>
-        <button class="btn btn-re" onclick="sendAction('/re')">📥 MASUK KEMBALI (RE)</button>
+        <button class="btn btn-out" onclick="sendAction('out')">📤 BARANG KELUAR (OUT)</button>
+        <button class="btn btn-re" onclick="sendAction('re')">📥 MASUK KEMBALI (RE)</button>
         <button class="btn btn-cancel" onclick="location.reload()">🔄 SCAN ULANG</button>
     </div>
 
@@ -57,7 +57,7 @@
         function sendAction(action) {
             if (!currentCode) return;
             
-            // 1. Tambahkan '/' ke action (agar payload yang diterima bot adalah /out_KODE)
+            // 1. Kirim action tanpa leading '/' — contoh: 'out' atau 're'
             // 2. Gunakan encodeURIComponent untuk mengamankan kode barang
             const payload = `${action}_${encodeURIComponent(currentCode)}`;
             
