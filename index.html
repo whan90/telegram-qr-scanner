@@ -52,11 +52,23 @@
         }
 
         function sendAction(command) {
-            // Mengirim data format: "/out KODE" atau "/re KODE"
-            const fullCommand = `${command} ${currentCode}`;
-            Telegram.WebApp.sendData(fullCommand);
+    // Mengirim data format: "/out KODE" atau "/re KODE"
+    const fullCommand = `${command} ${currentCode}`;
+    console.log("Sending WebApp data:", fullCommand);
+
+    // Kirim data ke bot. Beri jeda kecil sebelum menutup agar data sempat dikirim.
+    Telegram.WebApp.sendData(fullCommand);
+
+    // Delay 200-400ms sebelum menutup webapp. Cukup untuk mayoritas jaringan.
+    setTimeout(() => {
+        try {
             Telegram.WebApp.close();
+        } catch (e) {
+            console.warn("Gagal menutup WebApp:", e);
         }
+    }, 300);
+}
+
 
         // --- Inisialisasi Kamera (Paksa Belakang) ---
         const config = { fps: 10, qrbox: {width: 250, height: 250} };
