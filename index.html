@@ -55,41 +55,29 @@
         }
 
         function sendAction(action) {
-            // action adalah 'out' atau 're'
             if (!currentCode) return;
             
-            // Format Payload: action_KODE (contoh: out_ARR123)
-            const payload = `${action}_${currentCode}`;
+            // 1. Tambahkan '/' ke action (agar payload yang diterima bot adalah /out_KODE)
+            // 2. Gunakan encodeURIComponent untuk mengamankan kode barang
+            const payload = `${action}_${encodeURIComponent(currentCode)}`;
             
-            // Buat URL Deep Link
             const url = `https://t.me/${BOT_USERNAME}?start=${payload}`;
             
+            // Log untuk debug di console (jika Anda bisa membukanya)
             console.log("Mencoba membuka URL:", url);
 
-            // --- STRATEGI BARU: SHOTGUN APPROACH ---
+            // Coba cara paksa paling sederhana (sering berhasil di HP)
+            Telegram.WebApp.openTelegramLink(url);
             
-            // Cara 1: Coba cara standar (biasanya sukses di HP)
-            try {
-                Telegram.WebApp.openTelegramLink(url);
-            } catch (e) {
-                console.log("openTelegramLink gagal/diabaikan");
-            }
-
-            // Cara 2: PAKSA Buka Jendela Baru (Solusi untuk Telegram Desktop)
-            // Ini memaksa Windows menangani protokol t.me:// dan mengirim trigger baru ke aplikasi
+            // Timeout untuk memberi waktu Telegram memproses link
             setTimeout(() => {
-                window.open(url, '_blank');
-            }, 100);
-
-            // Cara 3: Redirect langsung (Cadangan terakhir)
-            setTimeout(() => {
-                window.location.href = url;
-            }, 200);
-
-            // Tutup Mini App setelah jeda agak lama untuk memastikan link tereksekusi
-            setTimeout(() => {
+                // Tutup Mini App
                 Telegram.WebApp.close();
-            }, 1000);
+            }, 500);
+            
+            // JANGAN gunakan window.open lagi karena itu sudah Anda coba,
+            // dan malah bisa memunculkan popup yang mengganggu di HP.
+            // Fokuskan pada cara native Telegram.
         }
 
         // --- Inisialisasi Kamera ---
