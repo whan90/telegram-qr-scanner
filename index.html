@@ -34,40 +34,39 @@
     </div>
 
     <script>
+        // --- KONFIGURASI ---
+        // GANTI INI DENGAN USERNAME BOT ANDA (Tanpa @)
+        // Contoh: const BOT_USERNAME = "GudangGeminiBot";
+        const BOT_USERNAME = "GSSPython_bot"; 
+        
         const html5Qrcode = new Html5Qrcode("reader");
         let currentCode = "";
 
         function onScanSuccess(decodedText, decodedResult) {
-            // Hentikan kamera dan tampilkan tombol
             currentCode = decodedText;
-            
             html5Qrcode.stop().then(() => {
                 document.getElementById('reader').style.display = 'none';
                 document.getElementById('result-container').style.display = 'block';
                 document.getElementById('scanned-code').innerText = currentCode;
-                // Feedback Haptik
                 if (Telegram.WebApp.HapticFeedback) {
                     Telegram.WebApp.HapticFeedback.notificationOccurred('success');
                 }
-            }).catch(err => console.error("Gagal menghentikan scanner:", err));
+            }).catch(err => console.error(err));
         }
 
-        function sendAction(command) {
-            // Mengirim data format: "/out KODE" atau "/re KODE"
-            const fullCommand = `${command} ${currentCode}`;
-            console.log("Sending WebApp data:", fullCommand);
-
-            // Kirim data ke bot.
-            Telegram.WebApp.sendData(fullCommand);
-
-            // Jeda 300ms untuk memberi waktu Telegram mengirim pesan
-            setTimeout(() => {
-                try {
-                    Telegram.WebApp.close();
-                } catch (e) {
-                    console.warn("Gagal menutup WebApp (Mungkin di browser desktop):", e);
-                }
-            }, 300);
+        function sendAction(action) {
+            // action adalah 'out' atau 're'
+            if (!currentCode) return;
+            
+            // Format Payload: action_KODE (contoh: out_ARR123)
+            const payload = `${action}_${currentCode}`;
+            
+            // Buat URL Deep Link
+            const url = `https://t.me/${BOT_USERNAME}?start=${payload}`;
+            
+            // Buka URL tersebut (ini akan menutup WebApp dan memicu command start di bot)
+            Telegram.WebApp.openTelegramLink(url);
+            Telegram.WebApp.close();
         }
 
         // --- Inisialisasi Kamera ---
@@ -75,25 +74,18 @@
         
         Html5Qrcode.getCameras().then(devices => {
             if (devices && devices.length) {
-                // Mencari kamera belakang secara heuristik
                 let cameraId = devices.find(d => d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('rear'));
                 let cameraToUse = cameraId ? cameraId.id : devices[0].id;
-                
-                html5Qrcode.start(cameraToUse, config, onScanSuccess).catch(err => {
-                    document.getElementById('reader').innerHTML = `❌ Gagal memulai kamera: ${err.name}. Coba refresh.`;
-                    console.error("Error starting camera:", err);
-                });
+                html5Qrcode.start(cameraToUse, config, onScanSuccess);
             } else {
                 document.getElementById('reader').innerHTML = "❌ Kamera tidak ditemukan.";
             }
         }).catch(err => {
             document.getElementById('reader').innerHTML = "❌ Izin kamera diperlukan.";
-            console.error("Error getting cameras:", err);
         });
 
-        // Set up WebApp
         Telegram.WebApp.ready();
-        Telegram.WebApp.expand(); // Agar full screen
+        Telegram.WebApp.expand();
     </script>
 </body>
 </html>
