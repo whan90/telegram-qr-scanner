@@ -35,14 +35,48 @@
 
     <script>
         // --- KONFIGURASI ---
-        // GANTI INI DENGAN USERNAME BOT ANDA (Tanpa @)
-        // Contoh: const BOT_USERNAME = "GudangGeminiBot";
         const BOT_USERNAME = "GSSPython_bot"; 
         
         const html5Qrcode = new Html5Qrcode("reader");
         let currentCode = "";
         let cameraActive = false;
         let selectedCameraId = null;
+        let permissionGranted = false;
+
+        // Fungsi untuk meminta permissions menggunakan Permissions API
+        async function requestCameraPermission() {
+            try {
+                // Gunakan Permissions API untuk request camera
+                const permission = await navigator.permissions.query({ name: 'camera' });
+                
+                if (permission.state === 'granted') {
+                    permissionGranted = true;
+                    return true;
+                } else if (permission.state === 'prompt') {
+                    // Permissions API tidak guarantee akses real-time, fallback ke getUserMedia
+                    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+                    // Close stream immediately after we got permission
+                    stream.getTracks().forEach(track => track.stop());
+                    permissionGranted = true;
+                    localStorage.setItem('cameraPermissionGranted', 'true');
+                    return true;
+                } else {
+                    return false;
+                }
+            } catch (err) {
+                // Fallback: try getUserMedia directly
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+                    stream.getTracks().forEach(track => track.stop());
+                    permissionGranted = true;
+                    localStorage.setItem('cameraPermissionGranted', 'true');
+                    return true;
+                } catch (error) {
+                    console.error("Camera permission denied:", error);
+                    return false;
+                }
+            }
+        }
 
         // Fungsi untuk menyimpan ID kamera yang dipilih
         function saveCameraId(cameraId) {
@@ -55,11 +89,10 @@
         }
 
         function onScanSuccess(decodedText, decodedResult) {
-            if (cameraActive) {  // Hindari pemrosesan ganda
+            if (cameraActive) {
                 cameraActive = false;
                 currentCode = decodedText;
                 
-                // Berhenti dari scan (tanpa reload halaman)
                 html5Qrcode.pause();
                 
                 document.getElementById('reader').style.display = 'none';
@@ -75,26 +108,17 @@
         function sendAction(action) {
             if (!currentCode) return;
             
-            // 1. Kirim action tanpa leading '/' — contoh: 'out' atau 're'
-            // 2. Gunakan encodeURIComponent untuk mengamankan kode barang
             const payload = `${action}_${encodeURIComponent(currentCode)}`;
-            
             const url = `https://t.me/${BOT_USERNAME}?start=${payload}`;
             
-            // Log untuk debug di console
-            console.log("Mencoba membuka URL:", url);
-
-            // Gunakan native Telegram Web App method
+            console.log("Membuka URL:", url);
             Telegram.WebApp.openTelegramLink(url);
             
-            // Timeout untuk memberi waktu Telegram memproses link
             setTimeout(() => {
-                // Tutup Mini App
                 Telegram.WebApp.close();
             }, 500);
         }
 
-        // Fungsi untuk restart scanner tanpa menghenti media sepenuhnya
         function restartScanner() {
             if (selectedCameraId) {
                 document.getElementById('reader').style.display = 'block';
@@ -102,16 +126,13 @@
                 currentCode = "";
                 cameraActive = true;
                 
-                // Resume scanning tanpa restart kamera
                 html5Qrcode.resume().catch(err => {
                     console.error("Gagal resume kamera:", err);
-                    // Fallback: mulai ulang jika resume gagal
                     startCamera();
                 });
             }
         }
 
-        // Fungsi untuk memulai kamera
         function startCamera() {
             const config = { fps: 10, qrbox: {width: 250, height: 250} };
             
@@ -119,19 +140,16 @@
                 if (devices && devices.length) {
                     let cameraId;
                     
-                    // 1. Cek apakah ada ID kamera yang tersimpan
                     const savedId = getSavedCameraId();
                     if (savedId && devices.some(d => d.id === savedId)) {
                         cameraId = savedId;
                     } else {
-                        // 2. Cari back/rear camera
                         let backCamera = devices.find(d => 
                             d.label.toLowerCase().includes('back') || 
                             d.label.toLowerCase().includes('rear')
                         );
                         cameraId = backCamera ? backCamera.id : devices[0].id;
                         
-                        // Simpan ID untuk penggunaan berikutnya
                         saveCameraId(cameraId);
                     }
                     
@@ -151,7 +169,6 @@
             });
         }
 
-        // Modifikasi tombol scan ulang untuk menggunakan fungsi baru
         function setupRestartButton() {
             const restartBtn = document.querySelector('.btn-cancel');
             if (restartBtn) {
@@ -160,17 +177,34 @@
         }
 
         // --- Inisialisasi ---
-        Telegram.WebApp.ready();
-        Telegram.WebApp.expand();
-        
-        // Mulai dengan membaca device orientation dan set fullscreen
-        if (Telegram.WebApp.isVerticalSwipeEnabled) {
-            Telegram.WebApp.disableVerticalSwipe();
+        async function initializeApp() {
+            Telegram.WebApp.ready();
+            Telegram.WebApp.expand();
+            
+            if (Telegram.WebApp.isVerticalSwipeEnabled) {
+                Telegram.WebApp.disableVerticalSwipe();
+            }
+            
+            setupRestartButton();
+            
+            // Request permission ONCE at startup
+            document.getElementById('reader').innerHTML = "⏳ Meminta akses kamera...";
+            
+            const permGranted = await requestCameraPermission();
+            if (permGranted) {
+                console.log("✅ Izin kamera berhasil diberikan");
+                startCamera();
+            } else {
+                document.getElementById('reader').innerHTML = "❌ Izin kamera ditolak. Silakan izinkan akses kamera di pengaturan perangkat Anda.";
+            }
         }
-        
-        // Setup dan mulai kamera
-        setupRestartButton();
-        startCamera();
+
+        // Jalankan inisialisasi saat DOM siap
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initializeApp);
+        } else {
+            initializeApp();
+        }
     </script>
 </body>
 </html>
