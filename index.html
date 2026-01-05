@@ -7,190 +7,64 @@
     <script src="https://unpkg.com/html5-qrcode"></script> 
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        body { 
-            font-family: sans-serif; 
-            margin: 0; 
-            padding: 20px; 
-            text-align: center; 
-            background-color: #f0f0f0;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-        }
-        .container {
-            background: white;
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-            max-width: 400px;
-            width: 100%;
-        }
-        h2 { color: #333; margin-top: 0; }
-        #reader { 
-            width: 100%; 
-            margin: 20px 0; 
-            border: 2px solid #333; 
-            border-radius: 8px; 
-            overflow: hidden;
-            display: none;
-        }
-        .btn { 
-            display: block; 
-            width: 100%; 
-            padding: 15px; 
-            margin: 10px 0; 
-            border: none; 
-            border-radius: 8px; 
-            font-size: 16px; 
-            font-weight: bold; 
-            cursor: pointer; 
-            color: white; 
-            transition: opacity 0.2s;
-        }
-        .btn:active { opacity: 0.8; }
-        .btn-out { background-color: #d32f2f; }
-        .btn-re { background-color: #1976d2; }
-        .btn-scan { background-color: #4caf50; }
+        body { font-family: sans-serif; margin: 0; padding: 20px; text-align: center; background-color: #f0f0f0; }
+        #reader { width: 100%; max-width: 400px; margin: 0 auto; border: 2px solid #333; border-radius: 8px; overflow: hidden; }
+        #result-container { display: none; margin-top: 20px; padding: 20px; background: white; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .btn { display: block; width: 100%; padding: 15px; margin: 10px 0; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; color: white; }
+        .btn-out { background-color: #d32f2f; } /* Merah */
+        .btn-re { background-color: #1976d2; } /* Biru */
+        .btn-cancel { background-color: #757575; } /* Abu */
         h3 { margin-bottom: 5px; color: #333; }
         #scanned-code { color: #007bff; font-size: 1.2em; word-break: break-all; }
-        #result-container { display: none; }
-        #menu-container { display: flex; flex-direction: column; gap: 10px; }
-        .loading { color: #999; font-size: 14px; margin-top: 10px; }
-        .error { color: #d32f2f; font-size: 14px; margin-top: 10px; }
     </style>
 </head>
 <body>
 
-    <div class="container">
-        <h2>📱 Scanner Gudang</h2>
-        
-        <div id="menu-container">
-            <button class="btn btn-scan" onclick="startQrScan()">📸 SCAN QR CODE</button>
-        </div>
+    <h2>Scanner Gudang</h2>
+    
+    <div id="reader"></div>
 
-        <div id="reader"></div>
-
-        <div id="result-container">
-            <h3>✅ Kode Terbaca:</h3>
-            <div id="scanned-code">...</div>
-            <p>Pilih Tindakan:</p>
-            <button class="btn btn-out" onclick="sendAction('out')">📤 BARANG KELUAR</button>
-            <button class="btn btn-re" onclick="sendAction('re')">📥 MASUK KEMBALI</button>
-            <button class="btn btn-scan" onclick="backToMenu()">🔄 SCAN LAGI</button>
-        </div>
-
-        <div class="loading" id="loading"></div>
-        <div class="error" id="error"></div>
+    <div id="result-container">
+        <h3>Kode Terbaca:</h3>
+        <div id="scanned-code">...</div>
+        <p>Pilih Tindakan:</p>
+        <button class="btn btn-out" onclick="sendAction('out')">📤 BARANG KELUAR (OUT)</button>
+        <button class="btn btn-re" onclick="sendAction('re')">📥 MASUK KEMBALI (RE)</button>
+        <button class="btn btn-cancel" onclick="location.reload()">🔄 SCAN ULANG</button>
     </div>
 
     <script>
-        const BOT_USERNAME = "GSSPython_bot";
-        let currentCode = "";
-        let html5QrcodeScanner = null;
-        let cameraActive = false;
-
-        // Inisialisasi Telegram Web App
-        Telegram.WebApp.ready();
-        Telegram.WebApp.expand();
+        // --- KONFIGURASI ---
+        // GANTI INI DENGAN USERNAME BOT ANDA (Tanpa @)
+        // Contoh: const BOT_USERNAME = "GudangGeminiBot";
+        const BOT_USERNAME = "GSSPython_bot"; 
         
-        console.log("🔍 Telegram Web App API available:", !!window.Telegram);
-        console.log("🔍 readQrCode method available:", typeof Telegram.WebApp.readQrCode);
+        const html5Qrcode = new Html5Qrcode("reader");
+        let currentCode = "";
+        let cameraActive = false;
+        let selectedCameraId = null;
 
-        async function startQrScan() {
-            hideError();
-            
-            // Coba native Telegram QR scanner dulu
-            if (typeof Telegram.WebApp.readQrCode === 'function') {
-                console.log("✅ Menggunakan native Telegram QR scanner");
-                await tryNativeScanner();
-            } else {
-                console.log("⚠️ Native scanner tidak tersedia, fallback ke html5-qrcode");
-                await tryHtml5QrCode();
-            }
+        // Fungsi untuk menyimpan ID kamera yang dipilih
+        function saveCameraId(cameraId) {
+            localStorage.setItem('selectedCameraId', cameraId);
         }
 
-        async function tryNativeScanner() {
-            try {
-                showLoading("📸 Membuka kamera...");
-                
-                const qrCode = await Telegram.WebApp.readQrCode();
-                
-                console.log("✅ QR Code berhasil dipindai:", qrCode);
-                
-                if (qrCode) {
-                    currentCode = qrCode;
-                    showResult(qrCode);
-                } else {
-                    showError("❌ Tidak ada QR code terdeteksi");
-                }
-            } catch (err) {
-                console.error("❌ Native scanner error:", err);
-                showError(`Native scanner error: ${err.message}`);
-                
-                // Fallback ke html5-qrcode
-                console.log("↻ Fallback ke html5-qrcode...");
-                setTimeout(() => tryHtml5QrCode(), 500);
-            }
+        // Fungsi untuk mengambil ID kamera yang tersimpan
+        function getSavedCameraId() {
+            return localStorage.getItem('selectedCameraId');
         }
 
-        async function tryHtml5QrCode() {
-            try {
-                showLoading("📸 Membuka kamera dengan html5-qrcode...");
-                
-                // Inisialisasi scanner
-                html5QrcodeScanner = new Html5Qrcode("reader");
-                
-                const config = { fps: 10, qrbox: {width: 250, height: 250} };
-                
-                // Coba dapatkan kamera
-                const devices = await Html5Qrcode.getCameras();
-                
-                if (!devices || devices.length === 0) {
-                    throw new Error("Kamera tidak ditemukan");
-                }
-                
-                // Gunakan back camera jika tersedia
-                let cameraId = devices.find(d => 
-                    d.label.toLowerCase().includes('back') || 
-                    d.label.toLowerCase().includes('rear')
-                )?.id || devices[0].id;
-                
-                console.log("📷 Menggunakan kamera:", cameraId);
-                
-                // Tampilkan reader
-                document.getElementById('reader').style.display = 'block';
-                document.getElementById('menu-container').style.display = 'none';
-                
-                cameraActive = true;
-                
-                await html5QrcodeScanner.start(
-                    cameraId, 
-                    config,
-                    onQrCodeSuccess,
-                    onQrCodeError
-                );
-                
-                hideLoading();
-                console.log("✅ Scanner html5-qrcode siap");
-                
-            } catch (err) {
-                console.error("❌ html5-qrcode error:", err);
-                showError(`Kamera error: ${err.message}`);
-                stopScanner();
-            }
-        }
-
-        function onQrCodeSuccess(decodedText, decodedResult) {
-            if (cameraActive) {
+        function onScanSuccess(decodedText, decodedResult) {
+            if (cameraActive) {  // Hindari pemrosesan ganda
                 cameraActive = false;
                 currentCode = decodedText;
                 
-                console.log("✅ QR Code berhasil dibaca:", decodedText);
+                // Berhenti dari scan (tanpa reload halaman)
+                html5Qrcode.pause();
                 
-                stopScanner();
-                showResult(decodedText);
+                document.getElementById('reader').style.display = 'none';
+                document.getElementById('result-container').style.display = 'block';
+                document.getElementById('scanned-code').innerText = currentCode;
                 
                 if (Telegram.WebApp.HapticFeedback) {
                     Telegram.WebApp.HapticFeedback.notificationOccurred('success');
@@ -198,69 +72,105 @@
             }
         }
 
-        function onQrCodeError(errorMessage) {
-            // Ignore scanning errors saat mencari QR code
-            console.log("🔍 Scanning...", errorMessage);
-        }
-
-        async function stopScanner() {
-            if (html5QrcodeScanner) {
-                try {
-                    await html5QrcodeScanner.stop();
-                    html5QrcodeScanner.clear();
-                    html5QrcodeScanner = null;
-                    console.log("✅ Scanner dihentikan");
-                } catch (err) {
-                    console.error("Error saat stop scanner:", err);
-                }
-            }
-            document.getElementById('reader').style.display = 'none';
-        }
-
-        function showResult(code) {
-            document.getElementById('result-container').style.display = 'block';
-            document.getElementById('scanned-code').innerText = code;
-            hideLoading();
-        }
-
-        function backToMenu() {
-            stopScanner();
-            document.getElementById('menu-container').style.display = 'flex';
-            document.getElementById('result-container').style.display = 'none';
-            currentCode = "";
-            hideLoading();
-            hideError();
-        }
-
-        function showLoading(msg) {
-            document.getElementById('loading').innerText = msg;
-        }
-
-        function hideLoading() {
-            document.getElementById('loading').innerText = "";
-        }
-
-        function showError(msg) {
-            document.getElementById('error').innerText = msg;
-        }
-
-        function hideError() {
-            document.getElementById('error').innerText = "";
-        }
-
         function sendAction(action) {
             if (!currentCode) return;
             
+            // 1. Kirim action tanpa leading '/' — contoh: 'out' atau 're'
+            // 2. Gunakan encodeURIComponent untuk mengamankan kode barang
             const payload = `${action}_${encodeURIComponent(currentCode)}`;
+            
             const url = `https://t.me/${BOT_USERNAME}?start=${payload}`;
             
-            console.log("📤 Membuka:", url);
+            // Log untuk debug di console
+            console.log("Mencoba membuka URL:", url);
+
+            // Gunakan native Telegram Web App method
             Telegram.WebApp.openTelegramLink(url);
             
+            // Timeout untuk memberi waktu Telegram memproses link
             setTimeout(() => {
+                // Tutup Mini App
                 Telegram.WebApp.close();
             }, 500);
         }
+
+        // Fungsi untuk restart scanner tanpa menghenti media sepenuhnya
+        function restartScanner() {
+            if (selectedCameraId) {
+                document.getElementById('reader').style.display = 'block';
+                document.getElementById('result-container').style.display = 'none';
+                currentCode = "";
+                cameraActive = true;
+                
+                // Resume scanning tanpa restart kamera
+                html5Qrcode.resume().catch(err => {
+                    console.error("Gagal resume kamera:", err);
+                    // Fallback: mulai ulang jika resume gagal
+                    startCamera();
+                });
+            }
+        }
+
+        // Fungsi untuk memulai kamera
+        function startCamera() {
+            const config = { fps: 10, qrbox: {width: 250, height: 250} };
+            
+            Html5Qrcode.getCameras().then(devices => {
+                if (devices && devices.length) {
+                    let cameraId;
+                    
+                    // 1. Cek apakah ada ID kamera yang tersimpan
+                    const savedId = getSavedCameraId();
+                    if (savedId && devices.some(d => d.id === savedId)) {
+                        cameraId = savedId;
+                    } else {
+                        // 2. Cari back/rear camera
+                        let backCamera = devices.find(d => 
+                            d.label.toLowerCase().includes('back') || 
+                            d.label.toLowerCase().includes('rear')
+                        );
+                        cameraId = backCamera ? backCamera.id : devices[0].id;
+                        
+                        // Simpan ID untuk penggunaan berikutnya
+                        saveCameraId(cameraId);
+                    }
+                    
+                    selectedCameraId = cameraId;
+                    cameraActive = true;
+                    
+                    html5Qrcode.start(cameraId, config, onScanSuccess).catch(err => {
+                        console.error("Error saat memulai kamera:", err);
+                        document.getElementById('reader').innerHTML = "❌ Gagal mengakses kamera. Pastikan izin diberikan.";
+                    });
+                } else {
+                    document.getElementById('reader').innerHTML = "❌ Kamera tidak ditemukan di perangkat.";
+                }
+            }).catch(err => {
+                console.error("Error mendapatkan daftar kamera:", err);
+                document.getElementById('reader').innerHTML = "❌ Izin kamera diperlukan untuk menggunakan scanner.";
+            });
+        }
+
+        // Modifikasi tombol scan ulang untuk menggunakan fungsi baru
+        function setupRestartButton() {
+            const restartBtn = document.querySelector('.btn-cancel');
+            if (restartBtn) {
+                restartBtn.onclick = restartScanner;
+            }
+        }
+
+        // --- Inisialisasi ---
+        Telegram.WebApp.ready();
+        Telegram.WebApp.expand();
+        
+        // Mulai dengan membaca device orientation dan set fullscreen
+        if (Telegram.WebApp.isVerticalSwipeEnabled) {
+            Telegram.WebApp.disableVerticalSwipe();
+        }
+        
+        // Setup dan mulai kamera
+        setupRestartButton();
+        startCamera();
     </script>
 </body>
 </html>
