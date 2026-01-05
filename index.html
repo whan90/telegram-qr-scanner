@@ -41,17 +41,35 @@
         
         const html5Qrcode = new Html5Qrcode("reader");
         let currentCode = "";
+        let cameraActive = false;
+        let selectedCameraId = null;
+
+        // Fungsi untuk menyimpan ID kamera yang dipilih
+        function saveCameraId(cameraId) {
+            localStorage.setItem('selectedCameraId', cameraId);
+        }
+
+        // Fungsi untuk mengambil ID kamera yang tersimpan
+        function getSavedCameraId() {
+            return localStorage.getItem('selectedCameraId');
+        }
 
         function onScanSuccess(decodedText, decodedResult) {
-            currentCode = decodedText;
-            html5Qrcode.stop().then(() => {
+            if (cameraActive) {  // Hindari pemrosesan ganda
+                cameraActive = false;
+                currentCode = decodedText;
+                
+                // Berhenti dari scan (tanpa reload halaman)
+                html5Qrcode.pause();
+                
                 document.getElementById('reader').style.display = 'none';
                 document.getElementById('result-container').style.display = 'block';
                 document.getElementById('scanned-code').innerText = currentCode;
+                
                 if (Telegram.WebApp.HapticFeedback) {
                     Telegram.WebApp.HapticFeedback.notificationOccurred('success');
                 }
-            }).catch(err => console.error(err));
+            }
         }
 
         function sendAction(action) {
@@ -63,10 +81,10 @@
             
             const url = `https://t.me/${BOT_USERNAME}?start=${payload}`;
             
-            // Log untuk debug di console (jika Anda bisa membukanya)
+            // Log untuk debug di console
             console.log("Mencoba membuka URL:", url);
 
-            // Coba cara paksa paling sederhana (sering berhasil di HP)
+            // Gunakan native Telegram Web App method
             Telegram.WebApp.openTelegramLink(url);
             
             // Timeout untuk memberi waktu Telegram memproses link
@@ -74,29 +92,85 @@
                 // Tutup Mini App
                 Telegram.WebApp.close();
             }, 500);
-            
-            // JANGAN gunakan window.open lagi karena itu sudah Anda coba,
-            // dan malah bisa memunculkan popup yang mengganggu di HP.
-            // Fokuskan pada cara native Telegram.
         }
 
-        // --- Inisialisasi Kamera ---
-        const config = { fps: 10, qrbox: {width: 250, height: 250} };
-        
-        Html5Qrcode.getCameras().then(devices => {
-            if (devices && devices.length) {
-                let cameraId = devices.find(d => d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('rear'));
-                let cameraToUse = cameraId ? cameraId.id : devices[0].id;
-                html5Qrcode.start(cameraToUse, config, onScanSuccess);
-            } else {
-                document.getElementById('reader').innerHTML = "❌ Kamera tidak ditemukan.";
+        // Fungsi untuk restart scanner tanpa menghenti media sepenuhnya
+        function restartScanner() {
+            if (selectedCameraId) {
+                document.getElementById('reader').style.display = 'block';
+                document.getElementById('result-container').style.display = 'none';
+                currentCode = "";
+                cameraActive = true;
+                
+                // Resume scanning tanpa restart kamera
+                html5Qrcode.resume().catch(err => {
+                    console.error("Gagal resume kamera:", err);
+                    // Fallback: mulai ulang jika resume gagal
+                    startCamera();
+                });
             }
-        }).catch(err => {
-            document.getElementById('reader').innerHTML = "❌ Izin kamera diperlukan.";
-        });
+        }
 
+        // Fungsi untuk memulai kamera
+        function startCamera() {
+            const config = { fps: 10, qrbox: {width: 250, height: 250} };
+            
+            Html5Qrcode.getCameras().then(devices => {
+                if (devices && devices.length) {
+                    let cameraId;
+                    
+                    // 1. Cek apakah ada ID kamera yang tersimpan
+                    const savedId = getSavedCameraId();
+                    if (savedId && devices.some(d => d.id === savedId)) {
+                        cameraId = savedId;
+                    } else {
+                        // 2. Cari back/rear camera
+                        let backCamera = devices.find(d => 
+                            d.label.toLowerCase().includes('back') || 
+                            d.label.toLowerCase().includes('rear')
+                        );
+                        cameraId = backCamera ? backCamera.id : devices[0].id;
+                        
+                        // Simpan ID untuk penggunaan berikutnya
+                        saveCameraId(cameraId);
+                    }
+                    
+                    selectedCameraId = cameraId;
+                    cameraActive = true;
+                    
+                    html5Qrcode.start(cameraId, config, onScanSuccess).catch(err => {
+                        console.error("Error saat memulai kamera:", err);
+                        document.getElementById('reader').innerHTML = "❌ Gagal mengakses kamera. Pastikan izin diberikan.";
+                    });
+                } else {
+                    document.getElementById('reader').innerHTML = "❌ Kamera tidak ditemukan di perangkat.";
+                }
+            }).catch(err => {
+                console.error("Error mendapatkan daftar kamera:", err);
+                document.getElementById('reader').innerHTML = "❌ Izin kamera diperlukan untuk menggunakan scanner.";
+            });
+        }
+
+        // Modifikasi tombol scan ulang untuk menggunakan fungsi baru
+        function setupRestartButton() {
+            const restartBtn = document.querySelector('.btn-cancel');
+            if (restartBtn) {
+                restartBtn.onclick = restartScanner;
+            }
+        }
+
+        // --- Inisialisasi ---
         Telegram.WebApp.ready();
         Telegram.WebApp.expand();
+        
+        // Mulai dengan membaca device orientation dan set fullscreen
+        if (Telegram.WebApp.isVerticalSwipeEnabled) {
+            Telegram.WebApp.disableVerticalSwipe();
+        }
+        
+        // Setup dan mulai kamera
+        setupRestartButton();
+        startCamera();
     </script>
 </body>
 </html>
